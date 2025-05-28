@@ -1,0 +1,5 @@
+streamlit
+openai
+pyperclip
+python-docx
+requests
