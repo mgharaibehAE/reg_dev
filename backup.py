@@ -19,6 +19,8 @@ ASSISTANT_ID = st.secrets["ASSISTANT_ID"]
 PASSWORD = st.secrets["login"]["password"]
 GITHUB_API_URL = "https://api.github.com/repos/mgharaibehAE/assistant/contents/docs"
 GITHUB_TOKEN = st.secrets["github"]["token"]
+GROK_API_KEY = st.secrets["GROK_API_KEY"]
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
 # Sidebar
 with st.sidebar:
@@ -137,70 +139,109 @@ with tab_docs:
 with tab_upload:
     st.header("Upload and Chat with Document")
 
-    uploaded_file = st.file_uploader("Upload a Word (.docx) or PDF (.pdf) file", type=["docx", "pdf"])
+    ai_model = st.selectbox("Choose AI Model", ["OpenAI Assistant", "Grok", "Gemini"])
+
+    uploaded_file = st.file_uploader("Upload a Word (.docx) or PDF (.pdf) file", type=["docx", "pdf"], accept_multiple_files=True)
 
     if uploaded_file:
-        # Detect new file upload and reset session states
-        if 'last_uploaded_file_name' not in st.session_state or st.session_state.last_uploaded_file_name != uploaded_file.name:
+        if 'last_uploaded_file_name' not in st.session_state or st.session_state.last_uploaded_file_name != [file.name for file in uploaded_file]:
             st.session_state.file_chat_messages = []
             st.session_state.file_thread_id = None
-            st.session_state.last_uploaded_file_name = uploaded_file.name
+            st.session_state.last_uploaded_file_name = [file.name for file in uploaded_file]
+
+        file_text = ""
+        if ai_model != "Gemini":
+            for file in uploaded_file:
+                file_bytes = file.read()
+                if file.type == "application/pdf":
+                    images = convert_from_bytes(file_bytes)
+                    for image in images:
+                        text = pytesseract.image_to_string(image)
+                        file_text += text + "\n"
+                else:
+                    doc = Document(file)
+                    file_text += "\n".join(paragraph.text for paragraph in doc.paragraphs) + "\n"
 
         if "file_thread_id" not in st.session_state or st.session_state.file_thread_id is None:
-            file_thread = openai.beta.threads.create()
-            st.session_state.file_thread_id = file_thread.id
-
-            if uploaded_file.type == "application/pdf":
-                file_bytes = uploaded_file.read()
-                images = convert_from_bytes(file_bytes)
-                file_text = ""
-                for image in images:
-                    text = pytesseract.image_to_string(image)
-                    file_text += text + "\n"
+            if ai_model == "OpenAI Assistant":
+                openai.api_key = OPENAI_API_KEY
+                file_thread = openai.beta.threads.create()
+                st.session_state.file_thread_id = file_thread.id
+                openai.beta.threads.messages.create(
+                    thread_id=st.session_state.file_thread_id,
+                    role="user",
+                    content=f"The following document content is provided for context:\n\n{file_text}"
+                )
             else:
-                doc = Document(uploaded_file)
-                file_text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+                st.session_state.file_chat_context = file_text
 
-            openai.beta.threads.messages.create(
-                thread_id=st.session_state.file_thread_id,
-                role="user",
-                content=f"The following document content is provided for context:\n\n{file_text}"
-            )
-
-        # Display chat messages
         for message in st.session_state.file_chat_messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # User input and interaction
-        if user_input := st.chat_input("Ask questions about the uploaded document..."):
+        user_input = st.chat_input("Ask questions about the uploaded document(s)...")
+
+        if user_input:
             st.session_state.file_chat_messages.append({"role": "user", "content": user_input})
-
-            openai.beta.threads.messages.create(
-                thread_id=st.session_state.file_thread_id,
-                role="user",
-                content=user_input
-            )
-
-            run = openai.beta.threads.runs.create(
-                thread_id=st.session_state.file_thread_id,
-                assistant_id=ASSISTANT_ID
-            )
+            response = ""
 
             with st.spinner("Assistant is typing..."):
-                while run.status not in ("completed", "failed"):
-                    time.sleep(1)
-                    run = openai.beta.threads.runs.retrieve(
+                if ai_model == "OpenAI Assistant":
+                    openai.api_key = OPENAI_API_KEY
+                    openai.beta.threads.messages.create(
                         thread_id=st.session_state.file_thread_id,
-                        run_id=run.id
+                        role="user",
+                        content=user_input
                     )
+                    run = openai.beta.threads.runs.create(
+                        thread_id=st.session_state.file_thread_id,
+                        assistant_id=ASSISTANT_ID
+                    )
+                    while run.status not in ("completed", "failed"):
+                        time.sleep(1)
+                        run = openai.beta.threads.runs.retrieve(
+                            thread_id=st.session_state.file_thread_id,
+                            run_id=run.id
+                        )
+                    if run.status == "completed":
+                        messages = openai.beta.threads.messages.list(thread_id=st.session_state.file_thread_id)
+                        response = next((msg.content[0].text.value for msg in messages.data if msg.role == "assistant"), "")
+                    else:
+                        response = "Assistant failed to respond. Please retry."
 
-            if run.status == "completed":
-                messages = openai.beta.threads.messages.list(thread_id=st.session_state.file_thread_id)
-                response = next((msg.content[0].text.value for msg in messages.data if msg.role == "assistant"), "")
+                elif ai_model == "Grok":
+                    headers = {
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {GROK_API_KEY}"
+                    }
+                    data = {
+                        "messages": [
+                            {"role": "system", "content": "You are an assistant helping with document queries."},
+                            {"role": "user", "content": st.session_state.file_chat_context + "\n" + user_input}
+                        ],
+                        "model": "grok-3-latest",
+                        "stream": False,
+                        "temperature": 0
+                    }
+                    grok_response = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=data)
+                    response = grok_response.json()['choices'][0]['message']['content']
 
-                st.session_state.file_chat_messages.append({"role": "assistant", "content": response})
-                with st.chat_message("assistant"):
-                    st.markdown(response)
-            else:
-                st.error("Assistant failed to respond. Please retry.")
+                elif ai_model == "Gemini":
+                    genai_client = genai.Client(api_key=GEMINI_API_KEY)
+                    uploaded_files = []
+                    for file in uploaded_file:
+                        file_data = io.BytesIO(file.read())
+                        uploaded_files.append(genai_client.files.upload(
+                            file=file_data,
+                            config=dict(mime_type=file.type)
+                        ))
+                    gemini_response = genai_client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=uploaded_files + [user_input]
+                    )
+                    response = gemini_response.text
+
+            st.session_state.file_chat_messages.append({"role": "assistant", "content": response})
+
+            with st.chat_message("assistant"):
+                st.markdown(response)
