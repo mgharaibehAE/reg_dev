@@ -53,19 +53,18 @@ st.title("Cleco Regulatory Assistant")
 # OpenAI setup
 openai.api_key = OPENAI_API_KEY
 
-# Initialize chat history and thread
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "thread_id" not in st.session_state:
-    thread = openai.beta.threads.create()
-    st.session_state.thread_id = thread.id
-
 # Tabs for chat, document summary, and document chat
 tab_chat, tab_docs, tab_upload = st.tabs(["Chat Assistant", "Document Summary", "Chat with Document"])
 
-# Chat Tab
+# First Tab (General Chat)
 with tab_chat:
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    if "thread_id" not in st.session_state:
+        thread = openai.beta.threads.create()
+        st.session_state.thread_id = thread.id
+
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -155,7 +154,7 @@ with tab_upload:
             openai.beta.threads.messages.create(
                 thread_id=st.session_state.file_thread_id,
                 role="user",
-                content=file_text
+                content=f"The following document content is provided for context: {file_text}"
             )
 
         for message in st.session_state.file_chat_messages:
