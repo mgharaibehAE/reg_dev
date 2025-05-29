@@ -135,36 +135,42 @@ with tab_docs:
         st.error(f"Failed to load documents. Error: {response.status_code}, {response.json().get('message')}")
 
 with tab_upload:
-    st.header("Upload and Chat with Document")
+    st.header("Upload and Chat with Documents")
 
-    uploaded_file = st.file_uploader("Upload a Word (.docx) or PDF (.pdf) file", type=["docx", "pdf"], accept_multiple_files=False)
+    uploaded_files = st.file_uploader("Upload Word (.docx) or PDF (.pdf) files", type=["docx", "pdf"], accept_multiple_files=True)
 
-    if uploaded_file:
-        # Detect new file upload and reset session states
-        if 'last_uploaded_file_name' not in st.session_state or st.session_state.last_uploaded_file_name != uploaded_file.name:
+    if uploaded_files:
+        uploaded_files_names = [file.name for file in uploaded_files]
+
+        if 'last_uploaded_files_names' not in st.session_state or st.session_state.last_uploaded_files_names != uploaded_files_names:
             st.session_state.file_chat_messages = []
             st.session_state.file_thread_id = None
-            st.session_state.last_uploaded_file_name = uploaded_file.name
+            st.session_state.last_uploaded_files_names = uploaded_files_names
 
         if "file_thread_id" not in st.session_state or st.session_state.file_thread_id is None:
             file_thread = openai.beta.threads.create()
             st.session_state.file_thread_id = file_thread.id
 
-            if uploaded_file.type == "application/pdf":
-                file_bytes = uploaded_file.read()
-                images = convert_from_bytes(file_bytes)
-                file_text = ""
-                for image in images:
-                    text = pytesseract.image_to_string(image)
-                    file_text += text + "\n"
-            else:
-                doc = Document(uploaded_file)
-                file_text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+            combined_file_text = ""
+
+            for uploaded_file in uploaded_files:
+                if uploaded_file.type == "application/pdf":
+                    file_bytes = uploaded_file.read()
+                    images = convert_from_bytes(file_bytes)
+                    file_text = ""
+                    for image in images:
+                        text = pytesseract.image_to_string(image)
+                        file_text += text + "\n"
+                else:
+                    doc = Document(uploaded_file)
+                    file_text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
+
+                combined_file_text += f"\nContent from {uploaded_file.name}:\n{file_text}\n"
 
             openai.beta.threads.messages.create(
                 thread_id=st.session_state.file_thread_id,
                 role="user",
-                content=f"The following document content is provided for context:\n\n{file_text}"
+                content=f"The following combined document contents are provided for context:\n\n{combined_file_text}"
             )
 
         # Display chat messages
@@ -173,7 +179,7 @@ with tab_upload:
                 st.markdown(message["content"])
 
         # User input and interaction
-        if user_input := st.chat_input("Ask questions about the uploaded document..."):
+        if user_input := st.chat_input("Ask questions about the uploaded documents..."):
             st.session_state.file_chat_messages.append({"role": "user", "content": user_input})
 
             openai.beta.threads.messages.create(
