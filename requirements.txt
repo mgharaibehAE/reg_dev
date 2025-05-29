@@ -5,3 +5,6 @@ python-docx
 requests
 PyPDF2
 python-docx
+pytesseract
+pdf2image
+pillow
