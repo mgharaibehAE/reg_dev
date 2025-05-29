@@ -139,16 +139,12 @@ with tab_upload:
 
     if uploaded_file:
         file_text = ""
-        
         if uploaded_file.type == "application/pdf":
             reader = PyPDF2.PdfReader(uploaded_file)
             file_text = "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
         elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = Document(uploaded_file)
             file_text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
-
-        st.markdown("### Document Content")
-        st.write(file_text)
 
         if "file_thread_id" not in st.session_state:
             file_thread = openai.beta.threads.create()
@@ -157,5 +153,5 @@ with tab_upload:
             openai.beta.threads.messages.create(
                 thread_id=st.session_state.file_thread_id,
                 role="user",
-                content=f"The following is the content of the uploaded document:\n{file_text}"
+                content=file_text
             )
