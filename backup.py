@@ -50,7 +50,7 @@ if not st.session_state.authenticated:
     pwd_input = st.text_input("Enter Password", type="password")
     if st.button("Login"):
         if pwd_input == PASSWORD:
-@@ -115,92 +121,146 @@ with tab_chat:
+with tab_chat:
 with tab_docs:
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(GITHUB_API_URL, headers=headers)
