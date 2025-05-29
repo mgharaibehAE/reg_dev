@@ -8,3 +8,5 @@ python-docx
 pytesseract
 pdf2image
 pillow
+poppler-utils
+tesseract-ocr
