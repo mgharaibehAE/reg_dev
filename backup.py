@@ -145,8 +145,12 @@ with tab_upload:
             st.session_state.file_thread_id = file_thread.id
 
             if uploaded_file.type == "application/pdf":
-                reader = PyPDF2.PdfReader(uploaded_file)
-                file_text = "\n".join(page.extract_text() for page in reader.pages if page.extract_text())
+                file_bytes = uploaded_file.read()
+                images = convert_from_bytes(file_bytes)
+                file_text = ""
+                for image in images:
+                    text = pytesseract.image_to_string(image)
+                    file_text += text + "\n"
             else:
                 doc = Document(uploaded_file)
                 file_text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
