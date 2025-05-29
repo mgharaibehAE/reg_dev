@@ -241,12 +241,12 @@ with tab_upload:
                     try:
                         for file in uploaded_file:
                             file_bytes = file.read()
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.name.split('.')[-1]}") as tmp:
-                                tmp.write(file_bytes)
-                                tmp.flush()
-                                temp_paths.append(tmp.name)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.name.split('.')[-1]}") as tmp_file:
+                                tmp_file.write(file_bytes)
+                                tmp_file.flush()
+                                temp_paths.append(tmp_file.name)
 
-                            uploaded_file_obj = genai.upload_file(path=tmp.name, mime_type=file.type)
+                            uploaded_file_obj = genai.upload_file(path=tmp_file.name, mime_type=file.type)
                             uploaded_files.append(uploaded_file_obj)
 
                         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -257,9 +257,9 @@ with tab_upload:
                         response = gemini_response.text
 
                     finally:
-                        for tmp_path in temp_paths:
-                            if tmp_path and os.path.exists(tmp_path):
-                                os.unlink(tmp_path)
+                        for path in temp_paths:
+                            if path and os.path.exists(path):
+                                os.unlink(path)
 
             st.session_state.file_chat_messages.append({"role": "assistant", "content": response})
 
