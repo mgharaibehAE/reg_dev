@@ -236,22 +236,29 @@ with tab_upload:
 
                 elif ai_model == "Gemini":
                     uploaded_files = []
-                    for file in uploaded_file:
-                        file_bytes = file.read()
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.name.split('.')[-1]}") as tmp:
-                            tmp.write(file_bytes)
-                            tmp_path = tmp.name
+                    temp_paths = []
+                    try:
+                        for file in uploaded_file:
+                            file_bytes = file.read()
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.name.split('.')[-1]}") as tmp:
+                                tmp.write(file_bytes)
+                                tmp_path = tmp.name
+                                temp_paths.append(tmp_path)
 
-                        uploaded_file_obj = genai.upload_file(path=tmp_path, mime_type=file.type)
-                        uploaded_files.append(uploaded_file_obj)
-                        os.unlink(tmp_path)
+                            uploaded_file_obj = genai.upload_file(path=tmp_path, mime_type=file.type)
+                            uploaded_files.append(uploaded_file_obj)
 
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    chat = model.start_chat(history=[
-                        {"role": "user", "parts": uploaded_files},
-                    ])
-                    gemini_response = chat.send_message(user_input)
-                    response = gemini_response.text
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        chat = model.start_chat(history=[
+                            {"role": "user", "parts": uploaded_files},
+                        ])
+                        gemini_response = chat.send_message(user_input)
+                        response = gemini_response.text
+
+                    finally:
+                        for path in temp_paths:
+                            if os.path.exists(path):
+                                os.unlink(path)
 
             st.session_state.file_chat_messages.append({"role": "assistant", "content": response})
 
