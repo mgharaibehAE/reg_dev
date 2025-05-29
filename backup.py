@@ -142,17 +142,20 @@ with tab_upload:
     if uploaded_files:
         uploaded_files_names = [file.name for file in uploaded_files]
 
+        # Reset if new files uploaded
         if 'last_uploaded_files_names' not in st.session_state or st.session_state.last_uploaded_files_names != uploaded_files_names:
             st.session_state.file_chat_messages = []
             st.session_state.file_thread_id = None
             st.session_state.last_uploaded_files_names = uploaded_files_names
 
+        # Create new thread if none exists
         if "file_thread_id" not in st.session_state or st.session_state.file_thread_id is None:
             file_thread = openai.beta.threads.create()
             st.session_state.file_thread_id = file_thread.id
 
             combined_file_text = ""
 
+            # Process each uploaded file
             for uploaded_file in uploaded_files:
                 if uploaded_file.type == "application/pdf":
                     file_bytes = uploaded_file.read()
@@ -161,24 +164,25 @@ with tab_upload:
                     for image in images:
                         text = pytesseract.image_to_string(image)
                         file_text += text + "\n"
-                else:
+                else:  # docx file
                     doc = Document(uploaded_file)
                     file_text = "\n".join(paragraph.text for paragraph in doc.paragraphs)
 
                 combined_file_text += f"\nContent from {uploaded_file.name}:\n{file_text}\n"
 
+            # Send combined content as context to the assistant
             openai.beta.threads.messages.create(
                 thread_id=st.session_state.file_thread_id,
                 role="user",
                 content=f"The following combined document contents are provided for context:\n\n{combined_file_text}"
             )
 
-        # Display chat messages
+        # Display existing chat messages
         for message in st.session_state.file_chat_messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-        # User input and interaction
+        # Allow user to input questions
         if user_input := st.chat_input("Ask questions about the uploaded documents..."):
             st.session_state.file_chat_messages.append({"role": "user", "content": user_input})
 
