@@ -11,6 +11,8 @@ from PIL import Image
 import io
 import google.generativeai as genai
 import io
+import tempfile
+
 
 # Streamlit configuration
 st.set_page_config(page_title="Cleco Regulatory Assistant", page_icon="🤖", layout="centered")
@@ -235,8 +237,14 @@ with tab_upload:
                 elif ai_model == "Gemini":
                     uploaded_files = []
                     for file in uploaded_file:
-                        file_data = file.read()
-                        uploaded_files.append(genai.upload_file(file_data, mime_type=file.type))
+                        file_bytes = file.read()
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.name.split('.')[-1]}") as tmp:
+                            tmp.write(file_bytes)
+                            tmp_path = tmp.name
+
+                        uploaded_file_obj = genai.upload_file(path=tmp_path, mime_type=file.type)
+                        uploaded_files.append(uploaded_file_obj)
+                        os.unlink(tmp_path)
 
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     chat = model.start_chat(history=[
