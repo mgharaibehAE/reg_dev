@@ -8,11 +8,9 @@ import time
 import pytesseract
 from pdf2image import convert_from_bytes
 from PIL import Image
-import io
+import os
 import google.generativeai as genai
-import io
 import tempfile
-
 
 # Streamlit configuration
 st.set_page_config(page_title="Cleco Regulatory Assistant", page_icon="🤖", layout="centered")
@@ -52,74 +50,7 @@ if not st.session_state.authenticated:
     pwd_input = st.text_input("Enter Password", type="password")
     if st.button("Login"):
         if pwd_input == PASSWORD:
-            st.session_state.authenticated = True
-            st.success("Login successful! Refreshing...")
-            time.sleep(1)
-            st.rerun()
-        else:
-            st.error("Incorrect password")
-    st.stop()
-
-st.title("Cleco Regulatory Assistant")
-
-# OpenAI setup
-openai.api_key = OPENAI_API_KEY
-
-# Tabs for chat, document summary, and document chat
-tab_chat, tab_docs, tab_upload = st.tabs(["Chat Assistant", "Document Summary", "Chat with Document"])
-
-# First Tab (General Chat)
-with tab_chat:
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    if "thread_id" not in st.session_state:
-        thread = openai.beta.threads.create()
-        st.session_state.thread_id = thread.id
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Ask your question..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        openai.beta.threads.messages.create(
-            thread_id=st.session_state.thread_id,
-            role="user",
-            content=prompt
-        )
-
-        run = openai.beta.threads.runs.create(
-            thread_id=st.session_state.thread_id,
-            assistant_id=ASSISTANT_ID
-        )
-
-        with st.spinner("Assistant is typing..."):
-            while run.status not in ("completed", "failed"):
-                time.sleep(1)
-                run = openai.beta.threads.runs.retrieve(
-                    thread_id=st.session_state.thread_id,
-                    run_id=run.id
-                )
-
-        if run.status == "completed":
-            messages = openai.beta.threads.messages.list(thread_id=st.session_state.thread_id)
-            response = next((msg.content[0].text.value for msg in messages.data if msg.role == "assistant"), "")
-
-            st.session_state.messages.append({"role": "assistant", "content": response})
-
-            with st.chat_message("assistant"):
-                st.markdown(response)
-        else:
-            st.error("Assistant failed to respond. Please retry.")
-
-    chat_history = "\n".join(f"{msg['role'].capitalize()}: {msg['content']}" for msg in st.session_state.messages)
-    st.download_button("Export Chat History", chat_history, file_name="chat_history.txt")
-
-# Document Summary Tab
+@@ -115,92 +121,146 @@ with tab_chat:
 with tab_docs:
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
     response = requests.get(GITHUB_API_URL, headers=headers)
@@ -141,7 +72,6 @@ with tab_docs:
                 st.error("Document not found.")
     else:
         st.error(f"Failed to load documents. Error: {response.status_code}, {response.json().get('message')}")
-
 
 with tab_upload:
     st.header("Upload and Chat with Document")
@@ -169,6 +99,7 @@ with tab_upload:
                 else:
                     doc = Document(file)
                     file_text += "\n".join(paragraph.text for paragraph in doc.paragraphs) + "\n"
+                file.seek(0)
 
         if "file_thread_id" not in st.session_state or st.session_state.file_thread_id is None:
             if ai_model == "OpenAI Assistant":
@@ -248,6 +179,7 @@ with tab_upload:
 
                                 uploaded_file_obj = genai.upload_file(path=tmp_file.name, mime_type=file.type)
                                 uploaded_files.append(uploaded_file_obj)
+                            file.seek(0)
 
                         model = genai.GenerativeModel('gemini-1.5-flash')
                         chat = model.start_chat(history=[
