@@ -134,17 +134,19 @@ with tab_docs:
     else:
         st.error(f"Failed to load documents. Error: {response.status_code}, {response.json().get('message')}")
 
-# Document Chat Tab
 with tab_upload:
     st.header("Upload and Chat with Document")
 
     uploaded_file = st.file_uploader("Upload a Word (.docx) or PDF (.pdf) file", type=["docx", "pdf"])
 
     if uploaded_file:
-        if "file_chat_messages" not in st.session_state:
+        # Detect new file upload and reset session states
+        if 'last_uploaded_file_name' not in st.session_state or st.session_state.last_uploaded_file_name != uploaded_file.name:
             st.session_state.file_chat_messages = []
+            st.session_state.file_thread_id = None
+            st.session_state.last_uploaded_file_name = uploaded_file.name
 
-        if "file_thread_id" not in st.session_state:
+        if "file_thread_id" not in st.session_state or st.session_state.file_thread_id is None:
             file_thread = openai.beta.threads.create()
             st.session_state.file_thread_id = file_thread.id
 
@@ -162,24 +164,36 @@ with tab_upload:
             openai.beta.threads.messages.create(
                 thread_id=st.session_state.file_thread_id,
                 role="user",
-                content=f"The following document content is provided for context: {file_text}"
+                content=f"The following document content is provided for context:\n\n{file_text}"
             )
 
+        # Display chat messages
         for message in st.session_state.file_chat_messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
+        # User input and interaction
         if user_input := st.chat_input("Ask questions about the uploaded document..."):
             st.session_state.file_chat_messages.append({"role": "user", "content": user_input})
 
-            openai.beta.threads.messages.create(thread_id=st.session_state.file_thread_id, role="user", content=user_input)
+            openai.beta.threads.messages.create(
+                thread_id=st.session_state.file_thread_id,
+                role="user",
+                content=user_input
+            )
 
-            run = openai.beta.threads.runs.create(thread_id=st.session_state.file_thread_id, assistant_id=ASSISTANT_ID)
+            run = openai.beta.threads.runs.create(
+                thread_id=st.session_state.file_thread_id,
+                assistant_id=ASSISTANT_ID
+            )
 
             with st.spinner("Assistant is typing..."):
                 while run.status not in ("completed", "failed"):
                     time.sleep(1)
-                    run = openai.beta.threads.runs.retrieve(thread_id=st.session_state.file_thread_id, run_id=run.id)
+                    run = openai.beta.threads.runs.retrieve(
+                        thread_id=st.session_state.file_thread_id,
+                        run_id=run.id
+                    )
 
             if run.status == "completed":
                 messages = openai.beta.threads.messages.list(thread_id=st.session_state.file_thread_id)
