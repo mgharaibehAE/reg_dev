@@ -5,6 +5,10 @@ from io import BytesIO
 from docx import Document
 import PyPDF2
 import time
+import pytesseract
+from pdf2image import convert_from_bytes
+from PIL import Image
+import io
 
 # Streamlit configuration
 st.set_page_config(page_title="Cleco Regulatory Assistant", page_icon="🤖", layout="centered")
